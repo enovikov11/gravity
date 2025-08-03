@@ -21,29 +21,20 @@
 
 <body>
     <div class="nospawn">
-        v8 <a href="versions.html">Версии и changelog</a> <span class="stats"></span><br />
+        v7 <a href="versions.html">Версии и changelog</a> <span class="stats"></span><br />
         <button onclick="clearAll()">clear</button>
         <button onclick="playpause(this)">pause</button>
     </div>
     <script>
         /*
             Идеи и фичреквесты:
-            - Скейлинг карты по кнопке
+            - Обновлять позиции в hash
             - Стрелочки с векторами скорости и ускорения для отображения
+            - Скейлинг карты
             - Возможность перемещать или менять объекты в паузе
             - Чтить закон сохранения энергии
             - Онлайн
             - Метод интегрирования второго (или даже четверного) порядка
-
-            Советы от Kright:
-            - Если ты силу будешь убавлять пропорционально радиусу, а не квадрату радиуса, то у тебя вместо стабильных эллиптических орбит будет фигня
-            - А ещё я советую юзать метод интегрирования второго порядка (в идеале вообще четвёртого взять), тогда точность намного лучше будет.
-            Вот прям метод интегрирования четвёртого порядка за один шаг может уделать по точности сотню шагов первого порядка точности
-            - https://kright.github.io/2025/03/12/Численненное-интегрирование-для-игровой-физики.html
-            - Можешь для начала метод Верле попробовать
-            - Там вместо скоростей хранятся предыдущая координата и текущая
-            - Ещё кстати если в коде поменяешь обновления координаты и скорости местами, то получится полу-неявный метод Эйлера, он симплектический
-            - Скорости в явном виде в Верле вообще нет
         */
 
         // EPS нужен чтобы ограничивать силу близких взаимодействий
@@ -63,15 +54,7 @@
         }
 
         let points = [], lastTime = Date.now(), point = null, halt = false;
-        let statsElem = document.querySelector(".stats"), frames = 0, steps = 0, visibleCount = 0, statText = "";
-
-        const numbers = location.hash.slice(1).split(",").map(e => +e);
-
-        if (numbers.length % 5 == 0 && !numbers.some(e => Number.isNaN(e))) {
-            for (let i = 0; i < numbers.length; i += 5) {
-                points.push(addPoint(numbers[i], numbers[i + 1], numbers[i + 2], numbers[i + 3], numbers[i + 4]));
-            }
-        }
+        let statsElem = document.querySelector(".stats"), frames = 0, steps = 0, visibleCount = 0;
 
         function playpause(button) {
             halt = !halt;
@@ -116,22 +99,22 @@
         }
 
         document.querySelector(".nospawn").addEventListener("pointerdown", e => e.stopPropagation());
-        document.querySelector(".nospawn").addEventListener("pointermove", e => e.stopPropagation());
         document.querySelector(".nospawn").addEventListener("pointerup", e => e.stopPropagation());
 
-        function addPoint(m, px, py, vx, vy) {
-            let point = document.createElement("div");
+        addEventListener("pointerdown", e => {
+            point = document.createElement("div");
 
             point.style.backgroundColor = `hsl(${(251 * points.length % 360) | 0}deg 100% 50%)`;
             point.style.position = "absolute";
 
-            point.m = m;
+            point.m = 0.1;
             point.addedAt = Date.now();
 
-            point.px = px;
-            point.py = py;
-            point.vx = vx;
-            point.vy = vy;
+            point.px = e.pageX;
+            point.py = e.pageY;
+
+            point.vx = 0;
+            point.vy = 0;
 
             point.updateSize = updateSize;
             point.updatePos = updatePos;
@@ -140,6 +123,7 @@
                 point.tracers = [];
                 point.tracersActive = 0;
                 point.tracerSkip = 0;
+
             }
 
             point.updateSize();
@@ -164,59 +148,26 @@
             }
 
             document.body.appendChild(point);
-            return point;
-        }
-
-        addEventListener("pointerdown", e => {
-            point = addPoint(0.1, e.pageX, e.pageY, 0, 0);
         });
 
         const vCoeff = -0.003;
 
         addEventListener("pointermove", e => {
-            if (!point) { return; }
-
-            if ((e.pageX - point.px) ** 2 + (e.pageY - point.py) ** 2 > 100) { point.lockSize = true; }
-
-            if (doTracers) {
-                for (let i = 0; i < point.tracers.length; i++) {
-                    point.tracers[i].style.left = e.pageX + ((i + 1) / point.tracers.length) * (point.px - e.pageX) - 3 + "px";
-                    point.tracers[i].style.top = e.pageY + ((i + 1) / point.tracers.length) * (point.py - e.pageY) - 3 + "px";
-                }
-            }
+            if (point && (e.pageX - point.px) ** 2 + (e.pageY - point.py) ** 2 > 100) { point.lockSize = true; }
         });
 
         addEventListener("pointerup", e => {
             point.vx = vCoeff * (e.pageX - point.px);
             point.vy = vCoeff * (e.pageY - point.py);
 
-            if (doTracers) {
-                for (let tracer of point.tracers) {
-                    tracer.style.left = point.px - 3 + "px";
-                    tracer.style.top = point.py - 3 + "px";
-                }
-            }
-
             points.push(point);
             point = null;
         });
 
-        function serialize() {
-            let numbers = [];
-
-            for (let point of points) {
-                numbers.push(point.m, point.px, point.py, point.vx, point.vy);
-            }
-
-            return numbers.map(e => e.toFixed(2)).join(",");
-        }
-
         setInterval(() => {
-            statText = `FPS: ${frames}, simulations per second: ${steps}, planets: ${points.length}`;
+            statsElem.innerText = `FPS: ${frames}, simulations per second: ${steps}, planets: ${points.length}, visible: ${visibleCount}`;
             frames = 0;
             steps = 0;
-
-            location.hash = serialize();
         }, 1000);
 
         function simulateStep(dt) {
@@ -326,12 +277,10 @@
                 for (let point of points) {
                     point.updatePos();
 
-                    let xPct = point.px / window.innerWidth, yPct = point.py / window.innerHeight;
+                    let xPct = point.px / window.innerWidth, yPct = point.px / window.innerHeight;
 
                     if (0 < xPct && xPct < 1 && 0 < yPct && yPct < 1) { visibleCount++; }
                 }
-
-                statsElem.innerText = statText + `, visible: ${visibleCount}`;
             }
 
             if (point && !point.lockSize) {
