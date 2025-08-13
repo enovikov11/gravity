@@ -21,11 +21,14 @@
 
 <body>
     <div class="nospawn">
-        v8 <a href="versions.html">Версии и changelog</a> <span class="stats"></span><br />
+        v9 <a href="versions.html">Версии и changelog</a> <span class="stats"></span><br />
         <button onclick="clearAll()">clear</button>
         <button onclick="playpause(this)">pause</button>
     </div>
     <script>
+        // Offline mode
+        navigator?.serviceWorker?.register("/sw.js");
+
         /*
             Идеи и фичреквесты:
             - Не притягивать к центру если 1шт, притягивать трейсеры тоже
